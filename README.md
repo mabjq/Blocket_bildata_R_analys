@@ -33,3 +33,10 @@ Projektet utvecklade tre linjära regressionsmodeller i R, där **Model 2** vald
 
 För att köra skripten (`Blocket_lm.R`, `SCB_stat.R`) behöver du:
 - **R** (version 4.0 eller senare).
+
+## Indata
+
+- Placera Datainsamling_Blocket.xlsx i samma mapp som Blocket_lm.R.
+
+
+
