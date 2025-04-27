@@ -304,6 +304,7 @@ anova_result <- aov(Försäljningspris ~ Modellgrupp, data = blocket_data)
 summary(anova_result)
 
 
+
 # ----------------------------------------------------------------------------
 # Regression och Modellering av Försäljningspris
 # Syfte: Utveckla en statistisk modell för att prediktera försäljningspris
@@ -586,3 +587,128 @@ print(confidence_intervals_sek)
 
 cat("\nPrediktionsintervall (95%) för individuella predikterade priser i SEK:\n")
 print(prediction_intervals_sek)
+
+
+# ----------------------------------------------------------------------------
+# Undersökning av diskrepans: Elbilar i modellen vs. rådatan
+# Syfte: Modellen visar att elbilar är 25 % billigare än bensinbilar, men rådatan
+#        och plotten (Figur A5) visar att elbilar har ett högre medelpris.
+#        Vi undersöker systematiskt orsaken till denna skillnad.
+# ----------------------------------------------------------------------------
+
+# Steg 1: Ladda och granska rådatan
+cat("\nSteg 1: Medelvärden och fördelningar i rådatan (blocket_data)\n")
+
+blocket_data |> 
+  group_by(Bränsle) |> 
+  summarise(
+    n = n(),
+    mean_price = mean(Försäljningspris, na.rm = TRUE),
+    median_price = median(Försäljningspris, na.rm = TRUE),
+    sd_price = sd(Försäljningspris, na.rm = TRUE)
+  ) |> 
+  print()
+
+blocket_data |> 
+  group_by(Bränsle) |> 
+  summarise(
+    mean_age = mean(Ålder, na.rm = TRUE),
+    median_age = median(Ålder, na.rm = TRUE)
+  ) |> 
+  print()
+
+blocket_data |> 
+  group_by(Bränsle, Modellgrupp) |> 
+  summarise(n = n()) |> 
+  mutate(prop = n / sum(n)) |> 
+  print()
+
+# Steg 2: Jämför medelpriser efter EDA och databehandling
+cat("\nSteg 2: Medelpriser i den bearbetade datan (train_data_4)\n")
+
+train_data_4 |> 
+  group_by(Bränsle) |> 
+  summarise(
+    n = n(),
+    mean_price = mean(exp(Log_Försäljningspris), na.rm = TRUE),  # Omvandla tillbaka till SEK
+    median_price = median(exp(Log_Försäljningspris), na.rm = TRUE)
+  ) |> 
+  print()
+
+train_data_4 |> 
+  group_by(Bränsle) |> 
+  summarise(
+    mean_age = mean(Ålder, na.rm = TRUE),
+    mean_miles = mean(Miltal, na.rm = TRUE),
+    mean_hp = mean(Hästkrafter, na.rm = TRUE)
+  ) |> 
+  print()
+
+# Steg 3: Undersök modellens prediktioner
+cat("\nSteg 3: Modellens predikterade priser per bränsletyp\n")
+
+train_data_4$predicted_log_price <- predict(final_model, newdata = train_data_4)
+train_data_4$predicted_price <- exp(train_data_4$predicted_log_price)
+train_data_4 |> 
+  group_by(Bränsle) |> 
+  summarise(
+    n = n(),
+    mean_predicted_price = mean(predicted_price, na.rm = TRUE),
+    mean_actual_price = mean(exp(Log_Försäljningspris), na.rm = TRUE)
+  ) |> 
+  print()
+
+# Steg 4: Skapa en "typisk" bil och predicera priset för att se den isolerade effekten av bränsletyp.
+cat("\nSteg 4: Predikterat pris för en typisk bil (el vs. bensin)\n")
+
+typical_car <- data.frame(
+  Ålder = mean(train_data_4$Ålder, na.rm = TRUE),
+  Miltal = mean(train_data_4$Miltal, na.rm = TRUE),
+  Hästkrafter = mean(train_data_4$Hästkrafter, na.rm = TRUE),
+  Bränsle = factor(c("bensin", "el"), levels = levels(train_data_4$Bränsle)),  # Testar både bensin och el
+  Säljare = factor("Privat", levels = levels(train_data_4$Säljare)),
+  Biltyp = factor("Kombi", levels = levels(train_data_4$Biltyp)),
+  Växellåda = factor("manuell", levels = levels(train_data_4$Växellåda)),
+  Modellgrupp = factor("Kompaktbilar", levels = levels(train_data_4$Modellgrupp))
+)
+
+typical_car$predicted_log_price <- predict(final_model, newdata = typical_car)
+typical_car$predicted_price <- exp(typical_car$predicted_log_price)
+typical_car[, c("Bränsle", "predicted_price")] |> 
+  print()
+
+# Steg 5: Jämför medelpriser med justering för ålder
+cat("\nSteg 5: Medelpriser per bränsle och åldersgrupp\n")
+
+blocket_data <- blocket_data |> 
+  mutate(Age_Group = cut(Ålder, breaks = c(0, 5, 10, 15, 20, Inf),
+                         labels = c("0-5", "6-10", "11-15", "16-20", "20+")))
+
+blocket_data |> 
+  group_by(Bränsle, Age_Group) |> 
+  summarise(
+    n = n(),
+    mean_price = mean(Försäljningspris, na.rm = TRUE)
+  ) |> 
+  filter(Bränsle %in% c("bensin", "el")) |> 
+  print()
+
+# Steg 6: Granska plotten och regionens effekt
+cat("\nSteg 6: Medelpriser per bränsle och region\n")
+
+blocket_data |> 
+  group_by(Bränsle, Region) |> 
+  summarise(
+    n = n(),
+    mean_price = mean(Försäljningspris, na.rm = TRUE)
+  ) |> 
+  filter(Bränsle %in% c("bensin", "el")) |> 
+  print()
+
+blocket_data |> 
+  group_by(Region, Bränsle) |> 
+  summarise(n = n()) |> 
+  filter(Bränsle %in% c("bensin", "el")) |> 
+  group_by(Region) |> 
+  mutate(prop = n / sum(n)) |> 
+  print()
